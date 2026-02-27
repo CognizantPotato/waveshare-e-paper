@@ -1,0 +1,23 @@
+# Private/local config (contains credentials/secrets)
+src/HttpImageRetriever/HttpImageRetrieverConfig.local.h
+
+# Common secret files
+.env
+.env.*
+*.pem
+*.key
+*.p12
+
+# IDE / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Build artifacts
+build/
+dist/
+*.o
+*.a
+*.elf
+*.bin
+*.map
