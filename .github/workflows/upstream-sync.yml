@@ -1,0 +1,77 @@
+name: Upstream Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 14 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add and fetch upstream
+        run: |
+          git remote add upstream https://github.com/waveshareteam/e-Paper.git || git remote set-url upstream https://github.com/waveshareteam/e-Paper.git
+          git fetch upstream master
+          git fetch origin starter/http-image-retriever vendor/upstream || true
+
+      - name: Update vendor branch
+        run: |
+          git checkout -B vendor/upstream upstream/master
+          git push --force-with-lease origin vendor/upstream
+
+      - name: Check for starter diff
+        id: diff_check
+        run: |
+          if git diff --quiet origin/starter/http-image-retriever..vendor/upstream; then
+            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_diff=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or reuse sync pull request
+        if: steps.diff_check.outputs.has_diff == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing_pr="$(gh pr list \
+            --base starter/http-image-retriever \
+            --head vendor/upstream \
+            --state open \
+            --json number \
+            --jq '.[0].number')"
+
+          latest_upstream="$(git rev-parse --short upstream/master)"
+
+          if [ -n "$existing_pr" ]; then
+            echo "Open PR #$existing_pr already exists for vendor/upstream -> starter/http-image-retriever."
+          else
+            gh pr create \
+              --base starter/http-image-retriever \
+              --head vendor/upstream \
+              --title "Sync upstream Waveshare changes (${latest_upstream})" \
+              --body "Automated upstream sync PR.
+
+This PR refreshes \`vendor/upstream\` from the official Waveshare repository and proposes merging those vendor changes into \`starter/http-image-retriever\`.
+
+- Source upstream branch: \`master\`
+- Local vendor branch: \`vendor/upstream\`
+- Reusable base branch: \`starter/http-image-retriever\`
+
+Review and merge this PR when the vendor updates look good. If GitHub reports conflicts, resolve them intentionally instead of forcing the update."
+          fi
