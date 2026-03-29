@@ -9,6 +9,9 @@ changes back upstream.
 - `master`
   Existing historical branch. Leave this alone unless you explicitly decide to
   repurpose or retire it later.
+- `archive/master-2026-03-29`
+  Explicit archive copy of the old `master` state before the repository was
+  re-centered around the upstream-syncable starter branch.
 - `codex/http-image-retriever-snapshot`
   Snapshot of the previous custom layout where `Arduino_R4` was removed.
 - `vendor/upstream`
@@ -37,6 +40,10 @@ git checkout -b my-project-branch
 
 If you want a separate repository for a project, fork or clone from
 `starter/http-image-retriever` rather than from `vendor/upstream`.
+
+For GitHub repository settings, `starter/http-image-retriever` should be the
+default branch so scheduled sync automation runs there and all new work starts
+from the maintained base.
 
 ## Upstream sync flow
 
@@ -69,4 +76,3 @@ git merge vendor/upstream
 
 Only run the merge locally when you want to resolve conflicts by hand instead of
 through the pull request flow.
-

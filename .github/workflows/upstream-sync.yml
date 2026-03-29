@@ -5,9 +5,19 @@ on:
   schedule:
     - cron: "17 14 * * 1"
 
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
+
+env:
+  UPSTREAM_URL: https://github.com/waveshareteam/e-Paper.git
+  UPSTREAM_BRANCH: master
+  VENDOR_BRANCH: vendor/upstream
+  STARTER_BRANCH: starter/http-image-retriever
 
 jobs:
   sync-upstream:
@@ -26,19 +36,19 @@ jobs:
 
       - name: Add and fetch upstream
         run: |
-          git remote add upstream https://github.com/waveshareteam/e-Paper.git || git remote set-url upstream https://github.com/waveshareteam/e-Paper.git
-          git fetch upstream master
-          git fetch origin starter/http-image-retriever vendor/upstream || true
+          git remote add upstream "$UPSTREAM_URL" || git remote set-url upstream "$UPSTREAM_URL"
+          git fetch --no-tags --prune upstream "$UPSTREAM_BRANCH"
+          git fetch --no-tags --prune origin "$STARTER_BRANCH" "$VENDOR_BRANCH" || true
 
       - name: Update vendor branch
         run: |
-          git checkout -B vendor/upstream upstream/master
-          git push --force-with-lease origin vendor/upstream
+          git checkout -B "$VENDOR_BRANCH" "upstream/$UPSTREAM_BRANCH"
+          git push --force-with-lease origin "$VENDOR_BRANCH"
 
       - name: Check for starter diff
         id: diff_check
         run: |
-          if git diff --quiet origin/starter/http-image-retriever..vendor/upstream; then
+          if git diff --quiet "origin/$STARTER_BRANCH..$VENDOR_BRANCH"; then
             echo "has_diff=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_diff=true" >> "$GITHUB_OUTPUT"
@@ -50,28 +60,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           existing_pr="$(gh pr list \
-            --base starter/http-image-retriever \
-            --head vendor/upstream \
+            --base "$STARTER_BRANCH" \
+            --head "$VENDOR_BRANCH" \
             --state open \
             --json number \
             --jq '.[0].number')"
 
-          latest_upstream="$(git rev-parse --short upstream/master)"
+          latest_upstream="$(git rev-parse --short "upstream/$UPSTREAM_BRANCH")"
+          pr_title="Sync upstream Waveshare changes (${latest_upstream})"
+          pr_body="Automated upstream sync PR.
 
-          if [ -n "$existing_pr" ]; then
-            echo "Open PR #$existing_pr already exists for vendor/upstream -> starter/http-image-retriever."
-          else
-            gh pr create \
-              --base starter/http-image-retriever \
-              --head vendor/upstream \
-              --title "Sync upstream Waveshare changes (${latest_upstream})" \
-              --body "Automated upstream sync PR.
+This PR refreshes \`$VENDOR_BRANCH\` from the official Waveshare repository and proposes merging those vendor changes into \`$STARTER_BRANCH\`.
 
-This PR refreshes \`vendor/upstream\` from the official Waveshare repository and proposes merging those vendor changes into \`starter/http-image-retriever\`.
-
-- Source upstream branch: \`master\`
-- Local vendor branch: \`vendor/upstream\`
-- Reusable base branch: \`starter/http-image-retriever\`
+- Source upstream branch: \`$UPSTREAM_BRANCH\`
+- Local vendor branch: \`$VENDOR_BRANCH\`
+- Reusable base branch: \`$STARTER_BRANCH\`
 
 Review and merge this PR when the vendor updates look good. If GitHub reports conflicts, resolve them intentionally instead of forcing the update."
+
+          if [ -n "$existing_pr" ]; then
+            gh pr edit "$existing_pr" \
+              --title "$pr_title" \
+              --body "$pr_body"
+          else
+            gh pr create \
+              --base "$STARTER_BRANCH" \
+              --head "$VENDOR_BRANCH" \
+              --title "$pr_title" \
+              --body "$pr_body"
           fi
