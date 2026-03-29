@@ -68,15 +68,18 @@ jobs:
 
           latest_upstream="$(git rev-parse --short "upstream/$UPSTREAM_BRANCH")"
           pr_title="Sync upstream Waveshare changes (${latest_upstream})"
-          pr_body="Automated upstream sync PR.
+          pr_body="$(cat <<EOF
+          Automated upstream sync PR.
 
-This PR refreshes \`$VENDOR_BRANCH\` from the official Waveshare repository and proposes merging those vendor changes into \`$STARTER_BRANCH\`.
+          This PR refreshes \`$VENDOR_BRANCH\` from the official Waveshare repository and proposes merging those vendor changes into \`$STARTER_BRANCH\`.
 
-- Source upstream branch: \`$UPSTREAM_BRANCH\`
-- Local vendor branch: \`$VENDOR_BRANCH\`
-- Reusable base branch: \`$STARTER_BRANCH\`
+          - Source upstream branch: \`$UPSTREAM_BRANCH\`
+          - Local vendor branch: \`$VENDOR_BRANCH\`
+          - Reusable base branch: \`$STARTER_BRANCH\`
 
-Review and merge this PR when the vendor updates look good. If GitHub reports conflicts, resolve them intentionally instead of forcing the update."
+          Review and merge this PR when the vendor updates look good. If GitHub reports conflicts, resolve them intentionally instead of forcing the update.
+          EOF
+          )"
 
           if [ -n "$existing_pr" ]; then
             gh pr edit "$existing_pr" \
