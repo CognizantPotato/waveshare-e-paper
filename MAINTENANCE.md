@@ -7,8 +7,8 @@ changes back upstream.
 ## Branch model
 
 - `master`
-  Existing historical branch. Leave this alone unless you explicitly decide to
-  repurpose or retire it later.
+  Retired historical branch. It is no longer intended for ongoing work and may
+  only remain locally for reference.
 - `archive/master-2026-03-29`
   Explicit archive copy of the old `master` state before the repository was
   re-centered around the upstream-syncable starter branch.
