@@ -68,6 +68,18 @@ jobs:
             echo "Using default GITHUB_TOKEN for pull request operations."
           fi
 
+          echo "GitHub actor: $GITHUB_ACTOR"
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Base branch: $STARTER_BRANCH"
+          echo "Head branch: $VENDOR_BRANCH"
+          echo "Head commit: $(git rev-parse --short "$VENDOR_BRANCH")"
+
+          gh auth status || true
+          gh repo view "$GITHUB_REPOSITORY" \
+            --json nameWithOwner,viewerPermission,defaultBranchRef,isPrivate \
+            --jq '{repo: .nameWithOwner, viewerPermission: .viewerPermission, defaultBranch: .defaultBranchRef.name, isPrivate: .isPrivate}' || true
+          gh api "repos/$GITHUB_REPOSITORY/actions/permissions/workflow" || true
+
           existing_pr="$(gh pr list \
             --base "$STARTER_BRANCH" \
             --head "$VENDOR_BRANCH" \
