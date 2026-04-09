@@ -1,9 +1,9 @@
-name: Upstream Sync
+name: Sync Waveshare Upstream
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 14 * * 1"
+    - cron: "0 22 * * *"
 
 concurrency:
   group: upstream-sync
@@ -40,12 +40,12 @@ jobs:
           git fetch --no-tags --prune upstream "$UPSTREAM_BRANCH"
           git fetch --no-tags --prune origin "$STARTER_BRANCH" "$VENDOR_BRANCH" || true
 
-      - name: Update vendor branch
+      - name: Refresh vendor mirror branch
         run: |
           git checkout -B "$VENDOR_BRANCH" "upstream/$UPSTREAM_BRANCH"
           git push --force-with-lease origin "$VENDOR_BRANCH"
 
-      - name: Check for starter diff
+      - name: Check whether starter branch needs an update
         id: diff_check
         run: |
           if git diff --quiet "origin/$STARTER_BRANCH..$VENDOR_BRANCH"; then
@@ -54,11 +54,20 @@ jobs:
             echo "has_diff=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Open or reuse sync pull request
+      - name: Open or update upstream sync pull request
         if: steps.diff_check.outputs.has_diff == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          SYNC_PR_TOKEN: ${{ secrets.SYNC_PR_TOKEN }}
+          GITHUB_TOKEN_FALLBACK: ${{ github.token }}
         run: |
+          if [ -n "$SYNC_PR_TOKEN" ]; then
+            export GH_TOKEN="$SYNC_PR_TOKEN"
+            echo "Using SYNC_PR_TOKEN for pull request operations."
+          else
+            export GH_TOKEN="$GITHUB_TOKEN_FALLBACK"
+            echo "Using default GITHUB_TOKEN for pull request operations."
+          fi
+
           existing_pr="$(gh pr list \
             --base "$STARTER_BRANCH" \
             --head "$VENDOR_BRANCH" \
@@ -67,17 +76,18 @@ jobs:
             --jq '.[0].number')"
 
           latest_upstream="$(git rev-parse --short "upstream/$UPSTREAM_BRANCH")"
-          pr_title="Sync upstream Waveshare changes (${latest_upstream})"
+          pr_title="Merge latest Waveshare upstream into starter branch (${latest_upstream})"
           pr_body="$(cat <<EOF
           Automated upstream sync PR.
 
-          This PR refreshes \`$VENDOR_BRANCH\` from the official Waveshare repository and proposes merging those vendor changes into \`$STARTER_BRANCH\`.
+          This workflow refreshed \`$VENDOR_BRANCH\` from the official Waveshare repository and is proposing those vendor updates for \`$STARTER_BRANCH\`.
 
-          - Source upstream branch: \`$UPSTREAM_BRANCH\`
-          - Local vendor branch: \`$VENDOR_BRANCH\`
-          - Reusable base branch: \`$STARTER_BRANCH\`
+          Flow:
+          - Fetch \`$UPSTREAM_BRANCH\` from the Waveshare upstream repository
+          - Reset \`$VENDOR_BRANCH\` to that upstream state
+          - Open or update a PR from \`$VENDOR_BRANCH\` into \`$STARTER_BRANCH\`
 
-          Review and merge this PR when the vendor updates look good. If GitHub reports conflicts, resolve them intentionally instead of forcing the update.
+          Review and merge this PR when the vendor changes look correct. If GitHub reports conflicts, resolve them intentionally instead of forcing the update.
           EOF
           )"
 
@@ -86,9 +96,20 @@ jobs:
               --title "$pr_title" \
               --body "$pr_body"
           else
-            gh pr create \
-              --base "$STARTER_BRANCH" \
-              --head "$VENDOR_BRANCH" \
-              --title "$pr_title" \
-              --body "$pr_body"
+            create_output="$(
+              gh pr create \
+                --base "$STARTER_BRANCH" \
+                --head "$VENDOR_BRANCH" \
+                --title "$pr_title" \
+                --body "$pr_body" 2>&1
+            )" || {
+              if printf '%s' "$create_output" | grep -q "Resource not accessible by integration"; then
+                echo "::error::Pull request creation is blocked for the current token. Enable 'Allow GitHub Actions to create and approve pull requests' in repository Actions settings or add a repo secret named SYNC_PR_TOKEN with permission to open pull requests."
+              fi
+
+              printf '%s\n' "$create_output"
+              exit 1
+            }
+
+            printf '%s\n' "$create_output"
           fi
