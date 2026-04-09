@@ -45,10 +45,13 @@ jobs:
           git checkout -B "$VENDOR_BRANCH" "upstream/$UPSTREAM_BRANCH"
           git push --force-with-lease origin "$VENDOR_BRANCH"
 
-      - name: Check whether starter branch needs an update
+      - name: Check whether vendor branch is ahead of starter
         id: diff_check
         run: |
-          if git diff --quiet "origin/$STARTER_BRANCH..$VENDOR_BRANCH"; then
+          ahead_count="$(git rev-list --count "origin/$STARTER_BRANCH..$VENDOR_BRANCH")"
+          echo "Commits ahead of starter branch: $ahead_count"
+
+          if [ "$ahead_count" -eq 0 ]; then
             echo "has_diff=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_diff=true" >> "$GITHUB_OUTPUT"
