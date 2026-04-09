@@ -82,11 +82,12 @@ jobs:
           owner="${GITHUB_REPOSITORY%%/*}"
           existing_pr="$(
             gh api "repos/$GITHUB_REPOSITORY/pulls" \
+              --method GET \
               -f state="open" \
               -f base="$STARTER_BRANCH" \
               -f head="$owner:$VENDOR_BRANCH" \
               --jq '.[0].number'
-          )"
+          )" || existing_pr=""
 
           latest_upstream="$(git rev-parse --short "upstream/$UPSTREAM_BRANCH")"
           pr_title="Merge latest Waveshare upstream into starter branch (${latest_upstream})"
