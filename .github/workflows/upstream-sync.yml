@@ -78,14 +78,15 @@ jobs:
           gh repo view "$GITHUB_REPOSITORY" \
             --json nameWithOwner,viewerPermission,defaultBranchRef,isPrivate \
             --jq '{repo: .nameWithOwner, viewerPermission: .viewerPermission, defaultBranch: .defaultBranchRef.name, isPrivate: .isPrivate}' || true
-          gh api "repos/$GITHUB_REPOSITORY/actions/permissions/workflow" || true
 
-          existing_pr="$(gh pr list \
-            --base "$STARTER_BRANCH" \
-            --head "$VENDOR_BRANCH" \
-            --state open \
-            --json number \
-            --jq '.[0].number')"
+          owner="${GITHUB_REPOSITORY%%/*}"
+          existing_pr="$(
+            gh api "repos/$GITHUB_REPOSITORY/pulls" \
+              -f state="open" \
+              -f base="$STARTER_BRANCH" \
+              -f head="$owner:$VENDOR_BRANCH" \
+              --jq '.[0].number'
+          )"
 
           latest_upstream="$(git rev-parse --short "upstream/$UPSTREAM_BRANCH")"
           pr_title="Merge latest Waveshare upstream into starter branch (${latest_upstream})"
@@ -104,19 +105,21 @@ jobs:
           )"
 
           if [ -n "$existing_pr" ]; then
-            gh pr edit "$existing_pr" \
-              --title "$pr_title" \
-              --body "$pr_body"
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$existing_pr" \
+              --method PATCH \
+              -f title="$pr_title" \
+              -f body="$pr_body"
           else
             create_output="$(
-              gh pr create \
-                --base "$STARTER_BRANCH" \
-                --head "$VENDOR_BRANCH" \
-                --title "$pr_title" \
-                --body "$pr_body" 2>&1
+              gh api "repos/$GITHUB_REPOSITORY/pulls" \
+                --method POST \
+                -f title="$pr_title" \
+                -f head="$VENDOR_BRANCH" \
+                -f base="$STARTER_BRANCH" \
+                -f body="$pr_body" 2>&1
             )" || {
-              if printf '%s' "$create_output" | grep -q "Resource not accessible by integration"; then
-                echo "::error::Pull request creation is blocked for the current token. Enable 'Allow GitHub Actions to create and approve pull requests' in repository Actions settings or add a repo secret named SYNC_PR_TOKEN with permission to open pull requests."
+              if printf '%s' "$create_output" | grep -Eq "Resource not accessible by (integration|personal access token)"; then
+                echo "::error::Pull request creation is blocked for the current token. For GITHUB_TOKEN, confirm Actions workflow permissions are read/write and PR creation is allowed. For SYNC_PR_TOKEN, confirm the token has repository access plus pull request and contents write permissions."
               fi
 
               printf '%s\n' "$create_output"
